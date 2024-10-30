@@ -1,35 +1,25 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
-import 'package:provider/provider.dart';
-import 'services/database_service.dart';
-import 'services/notification_service.dart';
-import 'models/user_settings.dart';
+import 'package:flutter_localizations/flutter_localizations.dart'; // 添加這行
+import 'package:shared_preferences/shared_preferences.dart';
+import 'screens/home_screen.dart';
 import 'screens/statistics_screen.dart';
 import 'screens/settings_screen.dart';
-import 'widgets/add_record_sheet.dart';
+import 'services/database_service.dart';
 
 void main() async {
-  // 确保Flutter绑定初始化
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // 初始化服务
-  await DatabaseService.instance.database;
-  await NotificationService.instance.init();
-  
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => UserSettingsProvider(),
-        ),
-      ],
-      child: PeriodTrackerApp(),
-    ),
-  );
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    await SharedPreferences.getInstance();
+    runApp(const PeriodTrackerApp());
+  } catch (e) {
+    print('Initialization error: $e');
+    runApp(const PeriodTrackerApp());
+  }
 }
 
 class PeriodTrackerApp extends StatelessWidget {
+  const PeriodTrackerApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -38,25 +28,45 @@ class PeriodTrackerApp extends StatelessWidget {
         primarySwatch: Colors.pink,
         useMaterial3: true,
       ),
+      // 添加本地化支援
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      // 支援的語言列表
+      supportedLocales: const [
+        Locale('zh', 'TW'), // 繁體中文
+        Locale('en', 'US'), // 英文
+      ],
+      // 設定預設語言為繁體中文
+      locale: const Locale('zh', 'TW'),
       home: MainScreen(),
-      debugShowCheckedModeBanner: false, // 移除 debug 标签
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
 class MainScreen extends StatefulWidget {
+  MainScreen({Key? key}) : super(key: key);  // 移除 const
+
   @override
   _MainScreenState createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
-  
-  static final List<Widget> _screens = [
-    HomeScreen(),
-    StatisticsScreen(),
-    SettingsScreen(),
-  ];
+  late final List<Widget> _screens;  // 使用 late final
+
+  @override
+  void initState() {
+    super.initState();
+    _screens = [
+      HomeScreen(),      // 移除 const
+      StatisticsScreen(),  // 移除 const
+      SettingsScreen(),    // 移除 const
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -69,7 +79,7 @@ class _MainScreenState extends State<MainScreen> {
             _selectedIndex = index;
           });
         },
-        destinations: const [
+        destinations: const [  // 這裡的 const 可以保留
           NavigationDestination(
             icon: Icon(Icons.calendar_today),
             label: '日曆',
@@ -83,78 +93,6 @@ class _MainScreenState extends State<MainScreen> {
             label: '設定',
           ),
         ],
-      ),
-    );
-  }
-}
-
-class HomeScreen extends StatefulWidget {
-  @override
-  _HomeScreenState createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  CalendarFormat _calendarFormat = CalendarFormat.month;
-  DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('月經週期追蹤'),
-        centerTitle: true,
-      ),
-      body: Column(
-        children: [
-          TableCalendar(
-            firstDay: DateTime.utc(2020, 1, 1),
-            lastDay: DateTime.utc(2030, 12, 31),
-            focusedDay: _focusedDay,
-            calendarFormat: _calendarFormat,
-            selectedDayPredicate: (day) {
-              return isSameDay(_selectedDay, day);
-            },
-            onDaySelected: (selectedDay, focusedDay) {
-              setState(() {
-                _selectedDay = selectedDay;
-                _focusedDay = focusedDay;
-              });
-              _showAddRecordDialog(selectedDay);
-            },
-            onFormatChanged: (format) {
-              setState(() {
-                _calendarFormat = format;
-              });
-            },
-          ),
-          Expanded(
-            child: Center(
-              child: Text(
-                '點擊日期來記錄經期',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddRecordDialog(_focusedDay),
-        child: Icon(Icons.add),
-        tooltip: '新增記錄',
-      ),
-    );
-  }
-
-  void _showAddRecordDialog(DateTime selectedDate) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) => AddRecordSheet(
-        selectedDate: selectedDate,
-        onSaved: () {
-          setState(() {});
-        },
       ),
     );
   }

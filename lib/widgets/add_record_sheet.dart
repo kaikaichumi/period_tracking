@@ -1,66 +1,57 @@
-// lib/widgets/add_record_sheet.dart
 import 'package:flutter/material.dart';
 import '../models/period_record.dart';
-import '../services/database_service.dart';
-import 'package:intl/intl.dart';
 
 class AddRecordSheet extends StatefulWidget {
   final DateTime selectedDate;
+  final Function(PeriodRecord) onSave;
   final PeriodRecord? existingRecord;
-  final Function? onSaved;
 
   const AddRecordSheet({
     Key? key,
     required this.selectedDate,
+    required this.onSave,
     this.existingRecord,
-    this.onSaved,
   }) : super(key: key);
 
   @override
-  _AddRecordSheetState createState() => _AddRecordSheetState();
+  State<AddRecordSheet> createState() => _AddRecordSheetState();
 }
 
 class _AddRecordSheetState extends State<AddRecordSheet> {
-  final _formKey = GlobalKey<FormState>();
   late DateTime _startDate;
   DateTime? _endDate;
-  FlowIntensity _flowIntensity = FlowIntensity.medium;
-  double _painLevel = 1;
-  bool _isLoading = false;
-  late TextEditingController _notesController;
-  
-  // 症狀列表
-  final Map<String, bool> _symptoms = {
-    '情緒變化': false,
-    '乳房脹痛': false,
-    '腰痛': false,
-    '頭痛': false,
-    '疲勞': false,
-    '痘痘': false,
-    '噁心': false,
-    '食慾改變': false,
-    '失眠': false,
-    '腹脹': false,
-  };
+  late int _painLevel;
+  late FlowIntensity _flowIntensity;
+  late Map<String, bool> _symptoms;
+  final TextEditingController _notesController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _startDate = widget.selectedDate;
-    _notesController = TextEditingController();
-    
-    // 如果是編輯現有記錄，載入資料
+    // 初始化數據
     if (widget.existingRecord != null) {
-      final record = widget.existingRecord!;
-      _startDate = record.startDate;
-      _endDate = record.endDate;
-      _flowIntensity = record.flowIntensity;
-      _painLevel = record.painLevel.toDouble();
-      record.symptoms.forEach((key, value) {
-        if (_symptoms.containsKey(key)) {
-          _symptoms[key] = value;
-        }
-      });
+      _startDate = widget.existingRecord!.startDate;
+      _endDate = widget.existingRecord!.endDate;
+      _painLevel = widget.existingRecord!.painLevel;
+      _flowIntensity = widget.existingRecord!.flowIntensity;
+      _symptoms = Map<String, bool>.from(widget.existingRecord!.symptoms);
+      _notesController.text = widget.existingRecord!.notes ?? '';
+    } else {
+      _startDate = widget.selectedDate;
+      _painLevel = 1;
+      _flowIntensity = FlowIntensity.medium;
+      _symptoms = {
+        '情緒變化': false,
+        '乳房脹痛': false,
+        '腰痛': false,
+        '頭痛': false,
+        '疲勞': false,
+        '痘痘': false,
+        '噁心': false,
+        '食慾改變': false,
+        '失眠': false,
+        '腹脹': false,
+      };
     }
   }
 
@@ -70,32 +61,294 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
     super.dispose();
   }
 
-  Future<void> _selectDate(BuildContext context, bool isStartDate) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: isStartDate ? _startDate : (_endDate ?? _startDate),
-      firstDate: isStartDate ? DateTime(2020) : _startDate,
-      lastDate: DateTime.now().add(Duration(days: 1)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Colors.pink,
-              onPrimary: Colors.white,
-              surface: Colors.pink.shade50,
-              onSurface: Colors.pink.shade900,
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // 頂部拖動條
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            height: 4,
+            width: 40,
+            decoration: BoxDecoration(
+              color: Colors.grey[300],
+              borderRadius: BorderRadius.circular(2),
             ),
           ),
-          child: child!,
-        );
-      },
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.all(16.0),
+              children: [
+                Text(
+                  widget.existingRecord != null ? '編輯月經記錄' : '新增月經記錄',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // 日期選擇
+                _buildDateSection(),
+                const SizedBox(height: 24),
+                // 經痛程度
+                _buildPainLevelSection(),
+                const SizedBox(height: 24),
+                // 出血量
+                _buildFlowIntensitySection(),
+                const SizedBox(height: 24),
+                // 症狀選擇
+                _buildSymptomsSection(),
+                const SizedBox(height: 24),
+                // 備註
+                _buildNotesSection(),
+                const SizedBox(height: 24),
+                // 保存按鈕
+                Center(
+                  child: ElevatedButton(
+                    onPressed: _endDate == null ? null : _savePeriod,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.pink,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 12,
+                      ),
+                    ),
+                    child: const Text(
+                      '保存',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDateSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              title: const Text('開始日期'),
+              subtitle: Text(
+                '${_startDate.year}/${_startDate.month}/${_startDate.day}',
+              ),
+              leading: const Icon(Icons.calendar_today),
+              onTap: () => _selectDate(true),
+            ),
+            const Divider(),
+            ListTile(
+              title: const Text('結束日期'),
+              subtitle: Text(
+                _endDate != null
+                    ? '${_endDate!.year}/${_endDate!.month}/${_endDate!.day}'
+                    : '請選擇結束日期',
+              ),
+              leading: const Icon(Icons.calendar_today),
+              onTap: () => _selectDate(false),
+            ),
+            if (_endDate != null) ...[
+              const Divider(),
+              Center(
+                child: Text(
+                  '週期長度：${_endDate!.difference(_startDate).inDays + 1} 天',
+                  style: TextStyle(
+                    color: Colors.pink[700],
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPainLevelSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '經痛程度',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Slider(
+              value: _painLevel.toDouble(),
+              min: 1,
+              max: 10,
+              divisions: 9,
+              label: _painLevel.toString(),
+              activeColor: Colors.pink,
+              onChanged: (value) {
+                setState(() {
+                  _painLevel = value.round();
+                });
+              },
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                Text('輕微'),
+                Text('中等'),
+                Text('劇烈'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFlowIntensitySection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '出血量',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<FlowIntensity>(
+                    title: const Text('輕'),
+                    value: FlowIntensity.light,
+                    groupValue: _flowIntensity,
+                    onChanged: (FlowIntensity? value) {
+                      setState(() {
+                        _flowIntensity = value!;
+                      });
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<FlowIntensity>(
+                    title: const Text('中'),
+                    value: FlowIntensity.medium,
+                    groupValue: _flowIntensity,
+                    onChanged: (FlowIntensity? value) {
+                      setState(() {
+                        _flowIntensity = value!;
+                      });
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<FlowIntensity>(
+                    title: const Text('重'),
+                    value: FlowIntensity.heavy,
+                    groupValue: _flowIntensity,
+                    onChanged: (FlowIntensity? value) {
+                      setState(() {
+                        _flowIntensity = value!;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSymptomsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '症狀',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8.0,
+              runSpacing: 8.0,
+              children: _symptoms.keys.map((symptom) {
+                return FilterChip(
+                  label: Text(symptom),
+                  selected: _symptoms[symptom]!,
+                  onSelected: (bool selected) {
+                    setState(() {
+                      _symptoms[symptom] = selected;
+                    });
+                  },
+                  selectedColor: Colors.pink[100],
+                  checkmarkColor: Colors.pink,
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotesSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '備註',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _notesController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: '在這裡添加備註...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectDate(bool isStartDate) async {
+    final DateTime currentDate = isStartDate ? _startDate : (_endDate ?? _startDate);
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: currentDate,
+      firstDate: isStartDate ? DateTime(2020) : _startDate,
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+      locale: const Locale('zh', 'TW'),
     );
 
     if (picked != null) {
       setState(() {
         if (isStartDate) {
           _startDate = picked;
-          // 如果結束日期在開始日期之前，重置結束日期
           if (_endDate != null && _endDate!.isBefore(_startDate)) {
             _endDate = null;
           }
@@ -106,289 +359,20 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
     }
   }
 
-  Future<void> _saveRecord() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
-      
-      try {
-        final record = PeriodRecord(
-          id: widget.existingRecord?.id,
-          startDate: _startDate,
-          endDate: _endDate,
-          flowIntensity: _flowIntensity,
-          painLevel: _painLevel.round(),
-          symptoms: Map.from(_symptoms),
-        );
+  void _savePeriod() {
+    if (_endDate == null) return;
 
-        if (widget.existingRecord != null) {
-          await DatabaseService.instance.updatePeriod(record);
-        } else {
-          await DatabaseService.instance.insertPeriod(record);
-        }
-
-        if (!mounted) return;
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('記錄已保存')),
-        );
-        
-        widget.onSaved?.call();
-        Navigator.pop(context);
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('保存失敗：$e')),
-        );
-      } finally {
-        if (mounted) {
-          setState(() => _isLoading = false);
-        }
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeader(),
-              _buildDateSelectors(),
-              _buildFlowIntensitySelector(),
-              _buildPainLevelSelector(),
-              _buildSymptomsSelector(),
-              _buildNotesInput(),
-              _buildButtons(),
-            ],
-          ),
-        ),
-      ),
+    final record = PeriodRecord(
+      id: widget.existingRecord?.id,
+      startDate: _startDate,
+      endDate: _endDate,
+      painLevel: _painLevel,
+      symptoms: _symptoms,
+      flowIntensity: _flowIntensity,
+      notes: _notesController.text.trim(),
     );
-  }
 
-  Widget _buildHeader() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.pink[50],
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.edit_calendar, color: Colors.pink),
-          SizedBox(width: 8),
-          Text(
-            widget.existingRecord != null ? '編輯記錄' : '新增記錄',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.pink[700],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDateSelectors() {
-    final dateFormat = DateFormat('yyyy/MM/dd');
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('開始日期'),
-                SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _selectDate(context, true),
-                  icon: Icon(Icons.calendar_today),
-                  label: Text(dateFormat.format(_startDate)),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('結束日期'),
-                SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: () => _selectDate(context, false),
-                  icon: Icon(Icons.calendar_today),
-                  label: Text(_endDate != null 
-                    ? dateFormat.format(_endDate!) 
-                    : '選擇日期'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFlowIntensitySelector() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('出血量'),
-          SizedBox(height: 8),
-          SegmentedButton<FlowIntensity>(
-            segments: [
-              ButtonSegment(
-                value: FlowIntensity.light,
-                label: Text('輕'),
-                icon: Icon(Icons.brightness_low),
-              ),
-              ButtonSegment(
-                value: FlowIntensity.medium,
-                label: Text('中'),
-                icon: Icon(Icons.brightness_medium),
-              ),
-              ButtonSegment(
-                value: FlowIntensity.heavy,
-                label: Text('重'),
-                icon: Icon(Icons.brightness_high),
-              ),
-            ],
-            selected: {_flowIntensity},
-            onSelectionChanged: (Set<FlowIntensity> selection) {
-              setState(() => _flowIntensity = selection.first);
-            },
-            style: ButtonStyle(
-              backgroundColor: MaterialStateProperty.resolveWith<Color>(
-                (Set<MaterialState> states) {
-                  if (states.contains(MaterialState.selected)) {
-                    return Colors.pink.shade100;
-                  }
-                  return Colors.transparent;
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPainLevelSelector() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('經痛程度：${_painLevel.round()}'),
-          SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(Icons.sentiment_very_satisfied, color: Colors.green),
-              Expanded(
-                child: Slider(
-                  value: _painLevel,
-                  min: 1,
-                  max: 10,
-                  divisions: 9,
-                  label: _painLevel.round().toString(),
-                  onChanged: (value) {
-                    setState(() => _painLevel = value);
-                  },
-                ),
-              ),
-              Icon(Icons.sentiment_very_dissatisfied, color: Colors.red),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSymptomsSelector() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('症狀（可複選）'),
-          SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _symptoms.keys.map((symptom) {
-              return FilterChip(
-                label: Text(symptom),
-                selected: _symptoms[symptom]!,
-                onSelected: (bool selected) {
-                  setState(() => _symptoms[symptom] = selected);
-                },
-                selectedColor: Colors.pink[100],
-                checkmarkColor: Colors.pink,
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotesInput() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: TextFormField(
-        controller: _notesController,
-        maxLines: 3,
-        decoration: InputDecoration(
-          labelText: '備註',
-          hintText: '輸入任何額外的觀察或備註...',
-          border: OutlineInputBorder(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildButtons() {
-    return Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          TextButton(
-            onPressed: _isLoading ? null : () => Navigator.pop(context),
-            child: Text('取消'),
-          ),
-          SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: _isLoading ? null : _saveRecord,
-            child: _isLoading
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text('保存'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.pink,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
+    widget.onSave(record);
+    Navigator.pop(context);
   }
 }

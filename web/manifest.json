@@ -1,11 +1,11 @@
 {
-    "name": "Period Tracking",
-    "short_name": "Period Tracking",
+    "name": "月經週期追蹤",
+    "short_name": "月經週期追蹤",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#FFFFFF",
-    "theme_color": "#E91E63",
-    "description": "A period tracking application.",
+    "background_color": "#0175C2",
+    "theme_color": "#0175C2",
+    "description": "A Period Tracking application.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

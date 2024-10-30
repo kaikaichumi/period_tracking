@@ -1,85 +1,67 @@
-// lib/services/database_service.dart
-import 'package:sqflite/sqflite.dart';
-import 'package:path/path.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/period_record.dart';
 
 class DatabaseService {
   static final DatabaseService instance = DatabaseService._init();
-  static Database? _database;
+  static SharedPreferences? _prefs;
+  static const String _recordsKey = 'period_records';
+  static int _nextId = 0;  // 用於生成唯一ID
 
   DatabaseService._init();
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB('period_tracker.db');
-    return _database!;
-  }
-
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
-
-    return await openDatabase(
-      path,
-      version: 1,
-      onCreate: _createDB,
-    );
-  }
-
-  Future<void> _createDB(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE periods (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        startDate TEXT NOT NULL,
-        endDate TEXT,
-        flowIntensity TEXT NOT NULL,
-        painLevel INTEGER NOT NULL,
-        symptoms TEXT NOT NULL
-      )
-    ''');
-
-    await db.execute('''
-      CREATE TABLE settings (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cycleLength INTEGER NOT NULL,
-        periodLength INTEGER NOT NULL,
-        notificationsEnabled INTEGER NOT NULL,
-        reminderTime TEXT NOT NULL
-      )
-    ''');
-  }
-
-  Future<int> insertPeriod(PeriodRecord record) async {
-    final db = await database;
-    return await db.insert(
-      'periods',
-      record.toJson(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+  Future<SharedPreferences> get prefs async {
+    if (_prefs != null) return _prefs!;
+    _prefs = await SharedPreferences.getInstance();
+    // 讀取已保存的最大ID
+    _nextId = _prefs!.getInt('next_id') ?? 0;
+    return _prefs!;
   }
 
   Future<List<PeriodRecord>> getAllPeriods() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('periods');
-    return List.generate(maps.length, (i) => PeriodRecord.fromJson(maps[i]));
+    final pref = await prefs;
+    final String? recordsJson = pref.getString(_recordsKey);
+    if (recordsJson == null) return [];
+
+    try {
+      List<dynamic> recordsList = jsonDecode(recordsJson);
+      return recordsList.map((json) => PeriodRecord.fromJson(json)).toList();
+    } catch (e) {
+      print('Error decoding records: $e');
+      return [];
+    }
+  }
+
+  Future<void> insertPeriod(PeriodRecord record) async {
+    final records = await getAllPeriods();
+    final newRecord = record.copyWith(id: _nextId++);
+    records.add(newRecord);
+    await _saveRecords(records);
+    // 保存新的ID
+    final pref = await prefs;
+    await pref.setInt('next_id', _nextId);
   }
 
   Future<void> updatePeriod(PeriodRecord record) async {
-    final db = await database;
-    await db.update(
-      'periods',
-      record.toJson(),
-      where: 'id = ?',
-      whereArgs: [record.id],
-    );
+    final records = await getAllPeriods();
+    final index = records.indexWhere((r) => r.id == record.id);
+    if (index != -1) {
+      records[index] = record;
+      await _saveRecords(records);
+    }
   }
 
   Future<void> deletePeriod(int id) async {
-    final db = await database;
-    await db.delete(
-      'periods',
-      where: 'id = ?',
-      whereArgs: [id],
+    final records = await getAllPeriods();
+    records.removeWhere((record) => record.id == id);
+    await _saveRecords(records);
+  }
+
+  Future<void> _saveRecords(List<PeriodRecord> records) async {
+    final pref = await prefs;
+    final recordsJson = jsonEncode(
+      records.map((record) => record.toJson()).toList(),
     );
+    await pref.setString(_recordsKey, recordsJson);
   }
 }
