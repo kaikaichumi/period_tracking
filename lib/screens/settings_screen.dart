@@ -1,79 +1,89 @@
-// lib/screens/settings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/user_settings.dart';
-import '../services/notification_service.dart';
+import '../providers/user_settings_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('設定'),
-      ),
-      body: Consumer<UserSettingsProvider>(
-        builder: (context, settings, child) {
-          return ListView(
+    return Consumer<UserSettingsProvider>(
+      builder: (context, settings, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('設定'),
+          ),
+          body: ListView(
             children: [
               ListTile(
-                title: Text('平均週期長度'),
+                title: const Text('週期長度'),
                 subtitle: Text('${settings.cycleLength} 天'),
-                trailing: IconButton(
-                  icon: Icon(Icons.edit),
-                  onPressed: () => _showCycleLengthDialog(context, settings),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showCycleLengthDialog(context, settings),
+              ),
+              ListTile(
+                title: const Text('經期長度'),
+                subtitle: Text('${settings.periodLength} 天'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _showPeriodLengthDialog(context, settings),
+              ),
+              ListTile(
+                title: const Text('提醒時間'),
+                subtitle: Text(
+                  '${settings.reminderTime.hour.toString().padLeft(2, '0')}:'
+                  '${settings.reminderTime.minute.toString().padLeft(2, '0')}',
                 ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => _selectTime(context, settings),
               ),
               SwitchListTile(
-                title: Text('經期提醒'),
-                subtitle: Text('在預測的經期開始前一天提醒'),
+                title: const Text('啟用通知'),
                 value: settings.notificationsEnabled,
                 onChanged: (bool value) {
-                  settings.updateNotificationsEnabled(value);
+                  settings.toggleNotifications(value);
                 },
               ),
-              if (settings.notificationsEnabled)
-                ListTile(
-                  title: Text('提醒時間'),
-                  subtitle: Text(
-                    '${settings.reminderTime.hour}:${settings.reminderTime.minute.toString().padLeft(2, '0')}',
-                  ),
-                  trailing: IconButton(
-                    icon: Icon(Icons.access_time),
-                    onPressed: () => _selectTime(context, settings),
-                  ),
-                ),
-              // 其他設定項目
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
+  }
+
+  Future<void> _selectTime(BuildContext context, UserSettingsProvider settings) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: settings.reminderTime,
+    );
+    if (picked != null) {
+      settings.updateReminderTime(picked);
+    }
   }
 
   Future<void> _showCycleLengthDialog(
     BuildContext context,
     UserSettingsProvider settings,
   ) async {
-    final controller = TextEditingController(
+    final TextEditingController controller = TextEditingController(
       text: settings.cycleLength.toString(),
     );
 
     await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('設定週期長度'),
+        title: const Text('設定週期長度'),
         content: TextField(
           controller: controller,
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(
+          decoration: const InputDecoration(
             labelText: '天數',
-            suffixText: '天',
+            suffix: Text('天'),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('取消'),
+            child: const Text('取消'),
           ),
           TextButton(
             onPressed: () {
@@ -83,24 +93,50 @@ class SettingsScreen extends StatelessWidget {
               }
               Navigator.pop(context);
             },
-            child: Text('確定'),
+            child: const Text('確定'),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _selectTime(
+  Future<void> _showPeriodLengthDialog(
     BuildContext context,
     UserSettingsProvider settings,
   ) async {
-    final TimeOfDay? time = await showTimePicker(
-      context: context,
-      initialTime: settings.reminderTime,
+    final TextEditingController controller = TextEditingController(
+      text: settings.periodLength.toString(),
     );
 
-    if (time != null) {
-      settings.updateReminderTime(time);
-    }
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('設定經期長度'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '天數',
+            suffix: Text('天'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newLength = int.tryParse(controller.text);
+              if (newLength != null && newLength > 0) {
+                settings.updatePeriodLength(newLength);
+              }
+              Navigator.pop(context);
+            },
+            child: const Text('確定'),
+          ),
+        ],
+      ),
+    );
   }
 }

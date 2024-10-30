@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart'; // 添加這行
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/home_screen.dart';
 import 'screens/statistics_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/database_service.dart';
+import 'providers/user_settings_provider.dart';
 
 void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     await SharedPreferences.getInstance();
-    runApp(const PeriodTrackerApp());
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => UserSettingsProvider()),
+        ],
+        child: const PeriodTrackerApp(),
+      ),
+    );
   } catch (e) {
     print('Initialization error: $e');
     runApp(const PeriodTrackerApp());
@@ -28,18 +37,15 @@ class PeriodTrackerApp extends StatelessWidget {
         primarySwatch: Colors.pink,
         useMaterial3: true,
       ),
-      // 添加本地化支援
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      // 支援的語言列表
       supportedLocales: const [
-        Locale('zh', 'TW'), // 繁體中文
-        Locale('en', 'US'), // 英文
+        Locale('zh', 'TW'),
+        Locale('en', 'US'),
       ],
-      // 設定預設語言為繁體中文
       locale: const Locale('zh', 'TW'),
       home: MainScreen(),
       debugShowCheckedModeBanner: false,
