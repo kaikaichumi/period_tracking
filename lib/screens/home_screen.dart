@@ -18,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime? _selectedDay;
   Map<DateTime, List<PeriodRecord>> _events = {};
   bool _isLoading = false;
+  PeriodRecord? _unfinishedRecord;
 
   @override
   void initState() {
@@ -26,31 +27,32 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadEvents();
   }
 
-  // 載入事件數據
   Future<void> _loadEvents() async {
     setState(() => _isLoading = true);
     try {
-      // 模擬從數據庫載入數據
-      // 實際使用時請替換為真實的數據庫操作
-      final records = [
-        PeriodRecord(
-          startDate: DateTime.now().subtract(const Duration(days: 6)),
-          endDate: DateTime.now().subtract(const Duration(days: 2)),
-          painLevel: 3,
-          flowIntensity: FlowIntensity.medium,
-        ),
-      ];
+      final records = await DatabaseService.instance.getAllPeriods();
+      
+      // 找到未完成的記錄（有開始日期但沒有結束日期的記錄）
+      _unfinishedRecord = null;  // 重置未完成記錄
+      for (var record in records) {
+        if (record.endDate == null) {
+          _unfinishedRecord = record;
+          break;
+        }
+      }
 
       final Map<DateTime, List<PeriodRecord>> newEvents = {};
       for (final record in records) {
-        if (record.endDate != null) {
-          DateTime current = record.startDate;
-          while (current.isBefore(record.endDate!) || 
-                 current.isAtSameMomentAs(record.endDate!)) {
-            final date = DateTime(current.year, current.month, current.day);
-            newEvents[date] = [...(newEvents[date] ?? []), record];
-            current = current.add(const Duration(days: 1));
+        DateTime current = record.startDate;
+        final endDate = record.endDate ?? record.startDate;
+        
+        while (current.isBefore(endDate.add(const Duration(days: 1)))) {
+          final date = DateTime(current.year, current.month, current.day);
+          if (newEvents[date] == null) {
+            newEvents[date] = [];
           }
+          newEvents[date]!.add(record);
+          current = current.add(const Duration(days: 1));
         }
       }
 
@@ -87,7 +89,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 _selectedDay = selectedDay;
                 _focusedDay = focusedDay;
               });
-              _showAddRecordSheet(selectedDay);
             },
             onFormatChanged: (format) {
               if (_calendarFormat != format) {
@@ -146,8 +147,16 @@ class _HomeScreenState extends State<HomeScreen> {
     )] ?? [];
 
     if (events.isEmpty) {
+      if (_unfinishedRecord != null) {
+        return Center(
+          child: Text(
+            '目前週期開始於：${DateFormat('yyyy/MM/dd').format(_unfinishedRecord!.startDate)}',
+            style: const TextStyle(fontSize: 16),
+          ),
+        );
+      }
       return const Center(
-        child: Text('點擊日期來記錄'),
+        child: Text('點擊右下角按鈕來記錄'),
       );
     }
 
@@ -203,19 +212,26 @@ class _HomeScreenState extends State<HomeScreen> {
       isDismissible: true,
       backgroundColor: Colors.transparent,
       builder: (BuildContext context) {
+        // 如果有未完成的記錄，且不是在編輯現有記錄，則將未完成的記錄作為基礎，並加入結束日期
+        final recordToEdit = existingRecord ?? 
+          (_unfinishedRecord != null ? _unfinishedRecord!.copyWith(endDate: selectedDate) : null);
+
         return Padding(
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
           ),
           child: AddRecordSheet(
             selectedDate: selectedDate,
-            existingRecord: existingRecord,
+            existingRecord: recordToEdit,
             onSave: (record) async {
-              // 這裡應該調用數據庫服務來保存記錄
-              print('Saving record: ${record.toJson()}');
-              await _loadEvents(); // 重新載入數據
+              if (recordToEdit != null) {
+                await DatabaseService.instance.updatePeriod(record);
+              } else {
+                await DatabaseService.instance.insertPeriod(record);
+              }
+              await _loadEvents();
               if (mounted) {
-                Navigator.pop(context);
+                Navigator.of(context).pop();
               }
             },
           ),
